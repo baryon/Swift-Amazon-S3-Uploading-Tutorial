@@ -1,4 +1,4 @@
-# How to upload a file to Amazon S3 using Swift
+# How to upload a file to Amazon S3 using Swift, Support PromiseKit and Progress callback
 
 I would like to share a simple tutorial how to upload a to <a href="https://github.com/aws/aws-sdk-ios">Amazon S3</a> in <i>iOS</i> using <i>Swift</i>. Let’s go.
 
@@ -10,11 +10,12 @@ In this example I will do this with helping <a href="https://cocoapods.org">Coco
 Create a <i>Podfile</i>:
 
 <pre>
-platform :ios, '8.0'
+platform :ios, '9.0'
 inhibit_all_warnings!
 use_frameworks!
 target 'AmazonS3Upload' do
 pod 'AWSS3'
+pod 'PromiseKit'
 end
 </pre>
 
@@ -26,53 +27,36 @@ pod install
 
 Open the generated workspace. And after that we can implement uploading of files using frameworks from <i>Pods</i>.
 
-We need to import 2 modules:
-
-<pre>
-import AWSS3
-import AWSCore
-</pre>
-
-Set up a <i>AWS configuration</i>  using your <i>credentials</i>. For example:
-
-<pre>
-let accessKey = "..."
-let secretKey = "..."
-let credentialsProvider = AWSStaticCredentialsProvider(accessKey: accessKey, secretKey: secretKey)
-let configuration = AWSServiceConfiguration(region: AWSRegionType.usEast1, credentialsProvider: credentialsProvider)
-AWSServiceManager.default().defaultServiceConfiguration = configuration
-</pre>
-
 Create an upload request:
 
 <pre>
-let url = ...URL to your file...
-let remoteName = "Name of uploaded file"
-let S3BucketName = "Name of your bucket on Amazon S3"
-let uploadRequest = AWSS3TransferManagerUploadRequest()!
-uploadRequest.body = url
-uploadRequest.key = remoteName
-uploadRequest.bucket = S3BucketName
-uploadRequest.contentType = "image/jpeg"
-uploadRequest.acl = .publicRead
+        let accessKey = "YOUR_IAM_USER_ACCESSKEY"
+        let secretKey = "YOUR_IAM_USER_SECRETKEY"
+        let S3BucketName = "YOUR_S3_BUCKETNAME"
+        let region = AWSRegionType.USWest1 //Your S3 Bucket's region, PLEASE CHECK IT CORRECTLY
+
+        let uploader = S3Uploader(accessKey: accessKey, secretKey: secretKey, bucketName: S3BucketName, region: region)
 </pre>
 
-And upload using <i>AWSS3TransferManager</i>.
+And upload using <i>uploader</i>.
 
 <pre>
-let transferManager = AWSS3TransferManager.default()
-transferManager?.upload(uploadRequest).continue({ (task: AWSTask<AnyObject>) -> Any? in
-  if let error = task.error {
-    print("Upload failed with error: (\(error.localizedDescription))")
-  }
-  if let exception = task.exception {
-    print("Upload failed with exception (\(exception))")
-  }
-  if task.result != nil {
-    let url = AWSS3.default().configuration.endpoint.url
-    let publicURL = url?.appendingPathComponent(uploadRequest.bucket!).appendingPathComponent(uploadRequest.key!)
-    print("Uploaded to:\(publicURL)")
-  }
-  return nil
-})
+        let progressBlock: AWSS3TransferUtilityProgressBlock = {(task, progress) in
+            print(progress)
+        }
+        
+        firstly {
+            uploader.upload(localFileURL: fileURL, progressBlock: progressBlock)
+            }
+            .done { (publicUrl) in
+                print(publicUrl)
+            }
+            .catch { (error) in
+                print(error)
+                
+            }
+            .finally {
+                DispatchQueue.main.async {
+                }
+        }
 </pre>

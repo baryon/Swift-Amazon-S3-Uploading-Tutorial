@@ -9,68 +9,58 @@
 import UIKit
 import AWSS3
 import AWSCore
+import PromiseKit
 
 class ViewController: UIViewController {
-
-	@IBOutlet weak var uploadButton: UIButton!
-	@IBOutlet weak var activityIndicator: UIActivityIndicatorView!
-	
-	override func viewDidLoad() {
-		super.viewDidLoad()
-	}
-
-	@IBAction func uploadButtonAction(_ sender: UIButton) {
-		uploadButton.isHidden = true
-		activityIndicator.startAnimating()
-		
-		let accessKey = "PLEASE_ENTER_YOUR_AMAZON_S3_ACCESS_KEY"
-		let secretKey = "PLEASE_ENTER_YOUR_AMAZON_S3_SECRET_KEY"
-		
-		let credentialsProvider = AWSStaticCredentialsProvider(accessKey: accessKey, secretKey: secretKey)
-		let configuration = AWSServiceConfiguration(region:AWSRegionType.USEast1, credentialsProvider:credentialsProvider)
-		
-		AWSServiceManager.default().defaultServiceConfiguration = configuration
-		
-		let S3BucketName = "BUCKET_NAME"
-		let remoteName = "test.jpg"
-		let fileURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(remoteName)
-		let image = UIImage(named: "test")
-		let data = image!.jpegData(compressionQuality: 0.9)
-		do {
-			try data?.write(to: fileURL)
-		}
-		catch {}
-		
-		let uploadRequest = AWSS3TransferManagerUploadRequest()!
-		uploadRequest.body = fileURL
-		uploadRequest.key = remoteName
-		uploadRequest.bucket = S3BucketName
-		uploadRequest.contentType = "image/jpeg"
-		uploadRequest.acl = .publicRead
-		
-		let transferManager = AWSS3TransferManager.default()
-		
-		transferManager.upload(uploadRequest).continueWith { [weak self] (task) -> Any? in
-			DispatchQueue.main.async {
-				self?.uploadButton.isHidden = false
-				self?.activityIndicator.stopAnimating()
-			}
-			
-			if let error = task.error {
-				print("Upload failed with error: (\(error.localizedDescription))")
-			}
-			
-			if task.result != nil {
-				let url = AWSS3.default().configuration.endpoint.url
-				let publicURL = url?.appendingPathComponent(uploadRequest.bucket!).appendingPathComponent(uploadRequest.key!)
-				if let absoluteString = publicURL?.absoluteString {
-					print("Uploaded to:\(absoluteString)")
-				}
-			}
-			
-			return nil
-		}
-	}
-	
+    
+    @IBOutlet weak var uploadButton: UIButton!
+    @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+    }
+    
+    @IBAction func uploadButtonAction(_ sender: UIButton) {
+        uploadButton.isHidden = true
+        activityIndicator.startAnimating()
+        
+        let accessKey = "YOUR_IAM_USER_ACCESSKEY"
+        let secretKey = "YOUR_IAM_USER_SECRETKEY"
+        let S3BucketName = "YOUR_S3_BUCKETNAME"
+        let remoteName = "test.jpg"
+        let region = AWSRegionType.USWest1 //Your S3 Bucket's region, PLEASE CHECK IT CORRECTLY
+        
+        let uploader = S3Uploader(accessKey: accessKey, secretKey: secretKey, bucketName: S3BucketName, region: region)
+        
+        let fileURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(remoteName)
+        let image = UIImage(named: "test")
+        let data = image!.jpegData(compressionQuality: 0.9)
+        do {
+            try data?.write(to: fileURL)
+        }
+        catch {}
+        
+        let progressBlock: AWSS3TransferUtilityProgressBlock = {(task, progress) in
+            print(progress)
+        }
+        
+        firstly {
+            uploader.upload(localFileURL: fileURL, progressBlock: progressBlock)
+            }
+            .done { (publicUrl) in
+                print(publicUrl)
+            }
+            .catch { (error) in
+                print(error)
+                
+            }
+            .finally {
+                DispatchQueue.main.async {
+                    self.uploadButton.isHidden = false
+                    self.activityIndicator.stopAnimating()
+                }
+        }
+    }
+    
 }
 
